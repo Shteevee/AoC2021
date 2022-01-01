@@ -1,0 +1,163 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"log"
+	"math"
+	"os"
+	"time"
+)
+
+type Point struct {
+	x int
+	y int
+}
+
+type RiskNode struct {
+	risk     int
+	distance int
+	visited  bool
+}
+
+func parseRiskMap(scanner *bufio.Scanner) [][]RiskNode {
+	riskMap := make([][]RiskNode, 0)
+	for scanner.Scan() {
+		riskRow := make([]RiskNode, 0)
+		for _, char := range scanner.Text() {
+			riskRow = append(
+				riskRow,
+				RiskNode{
+					risk:     int(char - '0'),
+					distance: math.MaxInt,
+					visited:  false,
+				},
+			)
+		}
+		riskMap = append(riskMap, riskRow)
+	}
+
+	return riskMap
+}
+
+func incrementRiskMap(riskMap [][]RiskNode) [][]RiskNode {
+	for i, riskRow := range riskMap {
+		for j, riskNode := range riskRow {
+			if riskNode.risk == 9 {
+				riskMap[i][j].risk = 1
+			} else {
+				riskMap[i][j].risk++
+			}
+		}
+	}
+
+	return riskMap
+}
+
+func copyRiskMap(riskMap [][]RiskNode) [][]RiskNode {
+	duplicate := make([][]RiskNode, len(riskMap))
+	for i := range riskMap {
+		duplicate[i] = make([]RiskNode, len(riskMap[i]))
+		copy(duplicate[i], riskMap[i])
+	}
+
+	return duplicate
+}
+
+func expandCaveSystem(riskMap [][]RiskNode) [][]RiskNode {
+	incrementedRiskMap := copyRiskMap(riskMap)
+	for k := 0; k < 4; k++ {
+		incrementedRiskMap = incrementRiskMap(incrementedRiskMap)
+		for i := range riskMap {
+			riskMap[i] = append(riskMap[i], incrementedRiskMap[i]...)
+		}
+	}
+
+	incrementedRiskMap = copyRiskMap(riskMap)
+	for k := 0; k < 4; k++ {
+		incrementedRiskMap = incrementRiskMap(copyRiskMap(incrementedRiskMap))
+		riskMap = append(riskMap, incrementedRiskMap...)
+	}
+
+	return riskMap
+}
+
+// should really use a priority queue to do this faster
+func findNextPoint(riskMap [][]RiskNode) (int, int) {
+	shortestPathValue := math.MaxInt
+	shortestPathPoint := Point{}
+	for i, riskRow := range riskMap {
+		for j := range riskRow {
+			if !riskMap[i][j].visited && riskMap[i][j].distance < shortestPathValue {
+				shortestPathValue = riskMap[i][j].distance
+				shortestPathPoint = Point{x: j, y: i}
+			}
+		}
+	}
+
+	return shortestPathPoint.x, shortestPathPoint.y
+}
+
+func findShortestPath(riskMap [][]RiskNode) [][]RiskNode {
+	exploring := true
+	x := 0
+	y := 0
+	for exploring {
+		shouldExploreLeft := x > 0 && !riskMap[y][x-1].visited && riskMap[y][x-1].distance > riskMap[y][x-1].risk+riskMap[y][x].distance
+		shouldExploreRight := x < len(riskMap[0])-1 && !riskMap[y][x+1].visited && riskMap[y][x+1].distance > riskMap[y][x+1].risk+riskMap[y][x].distance
+		shouldExploreUp := y > 0 && !riskMap[y-1][x].visited && riskMap[y-1][x].distance > riskMap[y-1][x].risk+riskMap[y][x].distance
+		shouldExploreDown := y < len(riskMap)-1 && !riskMap[y+1][x].visited && riskMap[y+1][x].distance > riskMap[y+1][x].risk+riskMap[y][x].distance
+
+		if shouldExploreLeft {
+			riskMap[y][x-1].distance = riskMap[y][x-1].risk + riskMap[y][x].distance
+		}
+		if shouldExploreRight {
+			riskMap[y][x+1].distance = riskMap[y][x+1].risk + riskMap[y][x].distance
+		}
+		if shouldExploreUp {
+			riskMap[y-1][x].distance = riskMap[y-1][x].risk + riskMap[y][x].distance
+		}
+		if shouldExploreDown {
+			riskMap[y+1][x].distance = riskMap[y+1][x].risk + riskMap[y][x].distance
+		}
+
+		riskMap[y][x].visited = true
+		x, y = findNextPoint(riskMap)
+		if x == len(riskMap[0])-1 && y == len(riskMap)-1 {
+			exploring = false
+		}
+	}
+
+	return riskMap
+}
+
+func findShortestPathLength(riskMap [][]RiskNode) int {
+	riskMap = findShortestPath(riskMap)
+
+	return riskMap[len(riskMap)-1][len(riskMap[0])-1].distance
+}
+
+func main() {
+	start := time.Now()
+	file, err := os.Open("test.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err = file.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	scanner := bufio.NewScanner(file)
+	riskMap := parseRiskMap(scanner)
+	riskMap = expandCaveSystem(riskMap)
+
+	riskMap[0][0].distance = 0
+	riskMap[0][0].visited = true
+	pathLength := findShortestPathLength(riskMap)
+
+	elapsed := time.Since(start)
+	fmt.Println("Shortest path length:", pathLength)
+	log.Printf("Time taken: %s", elapsed)
+}
